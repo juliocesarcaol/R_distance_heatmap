@@ -1,0 +1,137 @@
+# Install necessary libraries if they are not already installed
+if (!requireNamespace("tidyverse", quietly = TRUE)) install.packages("tidyverse")
+if (!requireNamespace("pheatmap", quietly = TRUE)) install.packages("pheatmap")
+if (!requireNamespace("viridis", quietly = TRUE)) install.packages("viridis")
+
+# Load the required libraries
+library(tidyverse)
+library(pheatmap)
+library(viridis)
+
+# Read data from a CSV file obtained from a "MEGA" distance matrix
+data <- read.csv("Distance_Data.csv", header = FALSE, stringsAsFactors = FALSE)
+
+# Process the data
+# Extract row and column names from the first row and column of the dataset
+row_names <- data$V1[-1]  # First column (excluding the header)
+col_names <- data[1, -1]  # First row (excluding the header)
+
+# Convert the remaining data into a numeric matrix
+matrix_data <- data[-1, -1] %>% 
+  as.matrix() %>% 
+  apply(2, as.numeric)
+
+# Check for problematic values and replace them if necessary
+# Replace NA/NaN values with zeros
+matrix_data[is.na(matrix_data)] <- 0
+
+# Assign row and column names to the matrix
+rownames(matrix_data) <- row_names
+colnames(matrix_data) <- col_names
+
+# Define the number of colors in the heatmap palette
+num_colors <- 20
+
+# Create a matrix of labels formatted as percentages
+number_labels <- matrix_data * 100  # Convert values to percentage
+number_labels <- apply(number_labels, c(1, 2), function(x) paste0(round(x, 2), "%"))
+
+# Generate a color palette using the viridis package
+color_palette <- viridis(num_colors)
+
+# Create the heatmap using the viridis color palette
+categorico <- pheatmap(matrix_data, 
+                       cluster_rows = FALSE,  # Do not reorder rows
+                       cluster_cols = FALSE,  # Do not reorder columns
+                       show_colnames = TRUE,
+                       show_rownames = TRUE,
+                       alpha = 1,
+                       main = "Distance Matrix Heatmap (Percentage Values)",
+                       color = color_palette,
+                       fontsize = 8,          # General font size
+                       fontsize_row = 12,     # Font size for row labels
+                       fontsize_col = 12,
+                       number_format = "%.2f%%",
+                       display_numbers = number_labels,  # Show values inside cells
+                       number_fontsize = 15   # Font size for numbers
+)
+
+# Extract colors used in the heatmap by categorizing matrix values into bins
+color_bins <- cut(as.vector(matrix_data), breaks = num_colors, labels = color_palette)
+
+# Count the frequency of each color
+color_freq <- table(color_bins)
+
+# Visualize color frequencies using a bar plot
+barplot(color_freq, col = names(color_freq), main = "Color Frequency", xlab = "Colors", ylab = "Frequency")
+
+# Convert the color frequency table to a data frame for easier manipulation
+color_df <- as.data.frame(color_freq)
+colnames(color_df) <- c("Color", "Frequency")
+
+# Filter out the color "#440154FF"
+filtered_color_df <- color_df %>% filter(Color != "#440154FF")
+
+# Plot a histogram excluding the filtered color
+ggplot(filtered_color_df, aes(x = Color, y = Frequency, fill = Color)) +
+  geom_bar(stat = "identity", color = "black") +
+  theme_minimal() +
+  labs(title = "Color Frequency (Excluding #440154FF)",
+       x = "Colors",
+       y = "Frequency") +
+  scale_fill_identity() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Add a density curve to the histogram
+ggplot(filtered_color_df, aes(x = Color, y = Frequency, fill = Color)) +
+  geom_bar(stat = "identity", color = "black", alpha = 1) +
+  geom_smooth(aes(group = 1), method = "loess", se = FALSE, color = "black", size = 0.5) +
+  theme_minimal() +
+  labs(title = "Color Frequency with Trend Curve",
+       x = "Colors",
+       y = "Frequency") +
+  scale_fill_identity() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Identify the color with the highest frequency
+max_color <- filtered_color_df %>% filter(Frequency == max(Frequency))
+
+# Highlight the most frequent color in the bar plot
+ggplot(filtered_color_df, aes(x = Color, y = Frequency, fill = Color)) +
+  geom_bar(stat = "identity", color = "black", alpha = 1) +
+  geom_text(data = max_color, aes(label = Frequency), vjust = -0.5, color = "red", size = 5) +
+  theme_minimal() +
+  labs(title = "Color Frequency (Highlighting Maximum)",
+       x = "Colors",
+       y = "Frequency") +
+  scale_fill_identity() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Calculate percentage values for each color frequency
+filtered_color_df <- filtered_color_df %>%
+  mutate(Percentage = Frequency / sum(Frequency) * 100)
+
+# Plot color frequency as percentages
+ggplot(filtered_color_df, aes(x = Color, y = Percentage, fill = Color)) +
+  geom_bar(stat = "identity", color = "black", alpha = 1) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), vjust = -0.5, size = 3) +
+  theme_minimal() +
+  labs(title = "Color Frequency in Percentages",
+       x = "Colors",
+       y = "Percentage") +
+  scale_fill_identity() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Calculate the average frequency
+mean_freq <- mean(filtered_color_df$Frequency)
+
+# Plot the color frequency with a reference line for the mean frequency
+ggplot(filtered_color_df, aes(x = Color, y = Frequency, fill = Color)) +
+  geom_bar(stat = "identity", color = "black", alpha = 1) +
+  geom_hline(yintercept = mean_freq, linetype = "dashed", color = "red", size = 1) +
+  theme_minimal() +
+  labs(title = "Color Frequency with Mean Line",
+       x = "Colors",
+       y = "Frequency") +
+  scale_fill_identity() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
